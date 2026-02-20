@@ -65,6 +65,7 @@ function buildProcessEnv(
     group.folder,
     '.claude',
   );
+  const realHome = os.homedir();
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
@@ -81,7 +82,6 @@ function buildProcessEnv(
   // Agent processes get a different HOME, so they can't see the user's MCP servers
   const sessionHome = path.dirname(groupSessionsDir);
   try {
-    const realHome = os.homedir();
     const userClaudeJson = path.join(realHome, '.claude.json');
     if (fs.existsSync(userClaudeJson)) {
       const userConfig = JSON.parse(fs.readFileSync(userClaudeJson, 'utf-8'));
@@ -150,6 +150,8 @@ function buildProcessEnv(
     NANOCLAW_IPC_DIR: groupIpcDir,
     NANOCLAW_GLOBAL_DIR: path.join(GROUPS_DIR, 'global'),
     NANOCLAW_EXTRA_DIR: extraDir,
+    // Preserve user's real HOME for Kiro config/auth lookup
+    NANOCLAW_REAL_HOME: realHome,
     // HOME set to parent of .claude/ so ~/.claude/ resolves to per-group sessions
     HOME: path.dirname(groupSessionsDir),
     // Propagate PATH so node/npx/claude are found
