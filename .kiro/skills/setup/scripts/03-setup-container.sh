@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 03-setup-container.sh — Host runtime readiness check (legacy filename; no container build)
+# 03-setup-container.sh — Build Docker image and verify container runtime tools
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -9,64 +9,74 @@ LOG_FILE="$PROJECT_ROOT/logs/setup.log"
 
 mkdir -p "$PROJECT_ROOT/logs"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [setup-runtime] $*" >> "$LOG_FILE"; }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [setup-container] $*" >> "$LOG_FILE"; }
 
 cd "$PROJECT_ROOT"
 
-# Ignore any legacy args like --runtime for backward compatibility
-while [[ $# -gt 0 ]]; do
-  shift
-done
+IMAGE="${NANOCLAW_AGENT_IMAGE:-nanoclaw-agent:latest}"
 
 BUILD_OK="false"
-KIRO_CLI="missing"
-AGENT_CONFIG="missing"
+IMAGE_OK="false"
+DOCKER="not_running"
+ERROR=""
 
-log "Checking host runtime readiness"
+log "Starting container setup for image $IMAGE"
 
-# 1) Build TypeScript
-log "Running npm run build"
-if npm run build >> "$LOG_FILE" 2>&1; then
-  BUILD_OK="true"
-  log "Build succeeded"
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  DOCKER="running"
+  log "Docker is running"
 else
-  log "Build failed"
+  ERROR="docker_not_running"
+  log "Docker is not running"
 fi
 
-# 2) Check kiro-cli availability
-if command -v kiro-cli >/dev/null 2>&1; then
-  KIRO_CLI="available"
-  log "kiro-cli found: $(command -v kiro-cli)"
-else
-  log "kiro-cli missing"
+# Build host TypeScript first (service process)
+if [ -z "$ERROR" ]; then
+  log "Running npm run build"
+  if npm run build >> "$LOG_FILE" 2>&1; then
+    log "Host build succeeded"
+  else
+    ERROR="host_build_failed"
+    log "Host build failed"
+  fi
 fi
 
-# 3) Check agent config
-if [ -f "$HOME/.kiro/agents/agent_config.json" ]; then
-  AGENT_CONFIG="found"
-  log "Kiro agent config found"
-else
-  log "Kiro agent config missing"
+# Build container image
+if [ -z "$ERROR" ]; then
+  log "Building Docker image $IMAGE"
+  if docker build -t "$IMAGE" "$PROJECT_ROOT/container" >> "$LOG_FILE" 2>&1; then
+    BUILD_OK="true"
+    log "Docker image build succeeded"
+  else
+    ERROR="image_build_failed"
+    log "Docker image build failed"
+  fi
+fi
+
+# Verify kiro-cli is available in container image
+if [ "$BUILD_OK" = "true" ]; then
+  log "Verifying kiro-cli inside container image"
+  if docker run --rm --entrypoint /bin/sh "$IMAGE" -lc "kiro-cli --version >/dev/null 2>&1" >> "$LOG_FILE" 2>&1; then
+    IMAGE_OK="true"
+    log "kiro-cli found in container image"
+  else
+    ERROR="kiro_cli_missing_in_image"
+    log "kiro-cli missing in container image"
+  fi
 fi
 
 STATUS="success"
-ERROR=""
-if [ "$BUILD_OK" != "true" ]; then
+if [ "$BUILD_OK" != "true" ] || [ "$IMAGE_OK" != "true" ]; then
   STATUS="failed"
-  ERROR="build_failed"
-elif [ "$KIRO_CLI" != "available" ]; then
-  STATUS="failed"
-  ERROR="kiro_cli_missing"
-elif [ "$AGENT_CONFIG" != "found" ]; then
-  STATUS="failed"
-  ERROR="agent_config_missing"
 fi
 
 cat <<EOF_STATUS
-=== NANOCLAW SETUP: SETUP_RUNTIME ===
+=== NANOCLAW SETUP: SETUP_CONTAINER ===
+RUNTIME: docker
+IMAGE: $IMAGE
+DOCKER: $DOCKER
 BUILD_OK: $BUILD_OK
-KIRO_CLI: $KIRO_CLI
-KIRO_AGENT_CONFIG: $AGENT_CONFIG
+IMAGE_OK: $IMAGE_OK
 STATUS: $STATUS
 ERROR: ${ERROR:-none}
 LOG: logs/setup.log

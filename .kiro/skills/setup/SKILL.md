@@ -1,9 +1,9 @@
 ---
 name: setup
-description: Run initial Kiro-Claw setup. Use when user wants to install dependencies, authenticate WhatsApp, register their main channel, or start background services. Triggers on "setup", "install", "configure Kiro-claw", or first-time setup requests.
+description: Run initial Kiro-Claw setup. Use when user wants to install dependencies, authenticate WhatsApp, build the Docker agent image, register their main channel, or start background services. Triggers on "setup", "install", "configure Kiro-claw", or first-time setup requests.
 ---
 
-# Kiro-claw Setup (Host Mode, Kiro CLI)
+# Kiro-claw Setup (Docker Desktop + Kiro CLI)
 
 Run setup scripts automatically. Pause only when user action is required (WhatsApp authentication, choosing channel, confirming paths). Scripts live in `.kiro/skills/setup/scripts/` and emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
 
@@ -17,7 +17,7 @@ Run `./.kiro/skills/setup/scripts/01-check-environment.sh` and parse the status 
 
 - If HAS_AUTH=true: note WhatsApp auth exists and offer to keep it.
 - If HAS_REGISTERED_GROUPS=true: note existing group config and offer to keep or reconfigure.
-- Record PLATFORM, NODE_OK, KIRO_CLI, and KIRO_AGENT_CONFIG.
+- Record PLATFORM, NODE_OK, DOCKER, and KIRO_AGENT_CONFIG.
 
 **If NODE_OK=false:**
 
@@ -26,9 +26,9 @@ Install Node.js 22 and re-run the environment check.
 - macOS: `brew install node@22` (or install nvm then `nvm install 22`)
 - Linux: NodeSource or nvm
 
-**If KIRO_CLI=missing:**
+**If DOCKER is not running:**
 
-Install `kiro-cli`, verify with `kiro-cli --version`, then re-run step 1.
+Start Docker Desktop (or Docker daemon on Linux), then re-run step 1.
 
 **If KIRO_AGENT_CONFIG=missing:**
 
@@ -46,17 +46,16 @@ If failed:
 
 Only escalate to user help after repeated failures.
 
-## 3. Runtime Readiness (No Container)
+## 3. Container Runtime Readiness (Docker)
 
-Run `./.kiro/skills/setup/scripts/03-setup-runtime.sh` and parse the status block.
+Run `./.kiro/skills/setup/scripts/03-setup-container.sh` and parse the status block.
 
-Do not run `./container/build.sh` in setup. This project uses host-mode Kiro CLI, not container-image builds.
+This script verifies container runtime prerequisites and image health:
 
-This script now verifies host-mode runtime prerequisites:
-
-- `npm run build` succeeds
-- `kiro-cli` is available
-- `~/.kiro/agents/agent_config.json` exists
+- Docker daemon is running
+- `npm run build` succeeds for host service code
+- Docker image `nanoclaw-agent:latest` builds successfully
+- `kiro-cli` is available inside the image
 
 If any check fails, fix and re-run step 3.
 
@@ -162,7 +161,8 @@ Run `./.kiro/skills/setup/scripts/09-verify.sh` and parse status block.
 If STATUS=failed, fix each failing component:
 
 - SERVICE not running: build and restart service
-- KIRO_CLI missing: install/repair Kiro CLI
+- DOCKER not running: start Docker Desktop/daemon
+- AGENT_IMAGE missing: re-run step 3 (`03-setup-container.sh`)
 - KIRO_AGENT_CONFIG missing: create or fix `~/.kiro/agents/agent_config.json`
 - WHATSAPP_AUTH not found: re-run step 4
 - REGISTERED_GROUPS=0: re-run steps 6-7
@@ -188,7 +188,9 @@ Log tail command:
 - Check trigger pattern and registered JID:
   `sqlite3 store/messages.db "SELECT * FROM registered_groups"`
 - Check `logs/nanoclaw.log` and `groups/main/logs/agent-*.log`
-- Verify `kiro-cli` works manually: `kiro-cli --version`
+- Verify Docker/image health:
+  `docker info`
+  `docker image inspect nanoclaw-agent:latest`
 
 **WhatsApp disconnected:**
 

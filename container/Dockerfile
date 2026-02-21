@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -31,6 +32,12 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Install agent-browser and claude-code globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code
+
+# Install Linux Kiro CLI for runtime user
+RUN mkdir -p /home/node/.local/bin \
+    && chown -R node:node /home/node \
+    && su -s /bin/bash node -c 'set -euo pipefail; curl -fsSL https://cli.kiro.dev/install | bash -s -- --force' \
+    && ln -sf /home/node/.local/bin/kiro-cli /usr/local/bin/kiro-cli
 
 # Create app directory
 WORKDIR /app

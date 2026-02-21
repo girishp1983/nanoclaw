@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 09-verify.sh — End-to-end health check for host-mode NanoClaw + Kiro CLI
+# 09-verify.sh — End-to-end health check for Docker Desktop container deployment
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -14,6 +14,8 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [verify] $*" >> "$LOG_FILE"; }
 cd "$PROJECT_ROOT"
 
 log "Starting verification"
+
+IMAGE="${NANOCLAW_AGENT_IMAGE:-nanoclaw-agent:latest}"
 
 # Detect platform
 case "$(uname -s)" in
@@ -43,35 +45,42 @@ elif [ "$PLATFORM" = "linux" ]; then
 fi
 log "Service: $SERVICE"
 
-# 2. Check Kiro CLI
-KIRO_CLI="missing"
-if command -v kiro-cli >/dev/null 2>&1; then
-  KIRO_CLI="available"
+# 2. Check Docker
+DOCKER="not_running"
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  DOCKER="running"
 fi
-log "Kiro CLI: $KIRO_CLI"
+log "Docker: $DOCKER"
 
-# 3. Check Kiro agent config
+# 3. Check container image
+AGENT_IMAGE="missing"
+if [ "$DOCKER" = "running" ] && docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  AGENT_IMAGE="available"
+fi
+log "Agent image ($IMAGE): $AGENT_IMAGE"
+
+# 4. Check Kiro agent config (mounted into container)
 KIRO_AGENT_CONFIG="missing"
 if [ -f "$HOME/.kiro/agents/agent_config.json" ]; then
   KIRO_AGENT_CONFIG="found"
 fi
 log "Kiro agent config: $KIRO_AGENT_CONFIG"
 
-# 4. Check WhatsApp auth
+# 5. Check WhatsApp auth
 WHATSAPP_AUTH="not_found"
 if [ -d "$PROJECT_ROOT/store/auth" ] && [ "$(ls -A "$PROJECT_ROOT/store/auth" 2>/dev/null)" ]; then
   WHATSAPP_AUTH="authenticated"
 fi
 log "WhatsApp auth: $WHATSAPP_AUTH"
 
-# 5. Check registered groups (in SQLite)
+# 6. Check registered groups (in SQLite)
 REGISTERED_GROUPS=0
 if [ -f "$PROJECT_ROOT/store/messages.db" ]; then
   REGISTERED_GROUPS=$(sqlite3 "$PROJECT_ROOT/store/messages.db" "SELECT COUNT(*) FROM registered_groups" 2>/dev/null || echo "0")
 fi
 log "Registered groups: $REGISTERED_GROUPS"
 
-# 6. Check mount allowlist
+# 7. Check mount allowlist
 MOUNT_ALLOWLIST="missing"
 if [ -f "$HOME/.config/nanoclaw/mount-allowlist.json" ]; then
   MOUNT_ALLOWLIST="configured"
@@ -80,7 +89,7 @@ log "Mount allowlist: $MOUNT_ALLOWLIST"
 
 # Determine overall status
 STATUS="success"
-if [ "$SERVICE" != "running" ] || [ "$KIRO_CLI" != "available" ] || [ "$KIRO_AGENT_CONFIG" != "found" ] || [ "$WHATSAPP_AUTH" = "not_found" ] || [ "$REGISTERED_GROUPS" -eq 0 ] 2>/dev/null; then
+if [ "$SERVICE" != "running" ] || [ "$DOCKER" != "running" ] || [ "$AGENT_IMAGE" != "available" ] || [ "$KIRO_AGENT_CONFIG" != "found" ] || [ "$WHATSAPP_AUTH" = "not_found" ] || [ "$REGISTERED_GROUPS" -eq 0 ] 2>/dev/null; then
   STATUS="failed"
 fi
 
@@ -89,7 +98,9 @@ log "Verification complete: $STATUS"
 cat <<EOF_STATUS
 === NANOCLAW SETUP: VERIFY ===
 SERVICE: $SERVICE
-KIRO_CLI: $KIRO_CLI
+DOCKER: $DOCKER
+AGENT_IMAGE: $AGENT_IMAGE
+IMAGE_NAME: $IMAGE
 KIRO_AGENT_CONFIG: $KIRO_AGENT_CONFIG
 WHATSAPP_AUTH: $WHATSAPP_AUTH
 REGISTERED_GROUPS: $REGISTERED_GROUPS

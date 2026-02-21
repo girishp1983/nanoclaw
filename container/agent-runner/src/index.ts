@@ -249,6 +249,7 @@ function ensureNanoclawMcpForKiro(
     const mcpServers = (parsed.mcpServers && typeof parsed.mcpServers === 'object')
       ? parsed.mcpServers
       : {};
+    const isDockerRuntime = process.env.NANOCLAW_IN_DOCKER === '1';
 
     const nanoclawServer: KiroMcpServerConfig = {
       type: 'stdio',
@@ -261,6 +262,15 @@ function ensureNanoclawMcpForKiro(
       },
       disabled: false,
     };
+
+    if (isDockerRuntime) {
+      for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+        if (serverName === 'nanoclaw') continue;
+        if (serverConfig && typeof serverConfig === 'object') {
+          (serverConfig as Record<string, unknown>).disabled = true;
+        }
+      }
+    }
 
     mcpServers.nanoclaw = nanoclawServer;
     parsed.mcpServers = mcpServers;

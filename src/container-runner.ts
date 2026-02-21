@@ -8,6 +8,8 @@ import os from 'os';
 import path from 'path';
 
 import {
+  AGENT_IMAGE,
+  AGENT_RUNTIME,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
   DATA_DIR,
@@ -39,6 +41,15 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+}
+
+interface ProcessContext {
+  env: Record<string, string>;
+  validatedMounts: Array<{
+    hostPath: string;
+    containerPath: string;
+    readonly: boolean;
+  }>;
 }
 
 function ensureMainKiroSteeringFile(projectRoot: string): void {
@@ -91,7 +102,7 @@ function ensureGlobalKiroSteeringFile(projectRoot: string): void {
 function buildProcessEnv(
   group: RegisteredGroup,
   isMain: boolean,
-): Record<string, string> {
+): ProcessContext {
   const projectRoot = process.cwd();
   const groupDir = path.join(GROUPS_DIR, group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
@@ -172,8 +183,9 @@ function buildProcessEnv(
     const linkPath = path.join(extraDir, entry);
     try { fs.unlinkSync(linkPath); } catch { /* ignore */ }
   }
+  let validatedMounts: ProcessContext['validatedMounts'] = [];
   if (group.containerConfig?.additionalMounts) {
-    const validatedMounts = validateAdditionalMounts(
+    validatedMounts = validateAdditionalMounts(
       group.containerConfig.additionalMounts,
       group.name,
       isMain,
@@ -208,7 +220,7 @@ function buildProcessEnv(
     env.NANOCLAW_PROJECT_DIR = projectRoot;
   }
 
-  return env;
+  return { env, validatedMounts };
 }
 
 /**
@@ -230,9 +242,10 @@ export async function runContainerAgent(
   const groupDir = path.join(GROUPS_DIR, group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const processEnv = buildProcessEnv(group, input.isMain);
+  const { env: processEnv, validatedMounts } = buildProcessEnv(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const processName = `nanoclaw-${safeName}-${Date.now()}`;
+  const runtime = AGENT_RUNTIME === 'host' ? 'host' : 'docker';
 
   const agentRunnerEntry = path.join(
     process.cwd(), 'container', 'agent-runner', 'dist', 'index.js',
@@ -242,6 +255,7 @@ export async function runContainerAgent(
     {
       group: group.name,
       processName,
+      runtime,
       env: {
         NANOCLAW_GROUP_DIR: processEnv.NANOCLAW_GROUP_DIR,
         NANOCLAW_IPC_DIR: processEnv.NANOCLAW_IPC_DIR,
@@ -255,6 +269,7 @@ export async function runContainerAgent(
     {
       group: group.name,
       processName,
+      runtime,
       isMain: input.isMain,
     },
     'Spawning agent process',
@@ -264,11 +279,97 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const container = spawn('node', [agentRunnerEntry], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: groupDir,
-      env: processEnv,
-    });
+    let container: ChildProcess;
+    if (runtime === 'docker') {
+      const dockerArgs: string[] = [
+        'run',
+        '-i',
+        '--rm',
+        '--name',
+        processName.slice(0, 63),
+        '-v',
+        `${processEnv.NANOCLAW_GROUP_DIR}:/workspace/group`,
+        '-v',
+        `${processEnv.NANOCLAW_GLOBAL_DIR}:/workspace/global`,
+        '-v',
+        `${processEnv.NANOCLAW_EXTRA_DIR}:/workspace/extra`,
+        '-v',
+        `${processEnv.NANOCLAW_IPC_DIR}:/workspace/ipc`,
+      ];
+
+      const hostKiroDir = path.join(processEnv.NANOCLAW_REAL_HOME, '.kiro');
+      if (fs.existsSync(hostKiroDir)) {
+        dockerArgs.push('-v', `${hostKiroDir}:/home/node/.kiro`);
+      } else {
+        logger.warn({ hostKiroDir }, 'Host ~/.kiro not found; containerized Kiro may fail to authenticate');
+      }
+
+      const hostAwsDir = path.join(processEnv.NANOCLAW_REAL_HOME, '.aws');
+      if (fs.existsSync(hostAwsDir)) {
+        dockerArgs.push('-v', `${hostAwsDir}:/home/node/.aws`);
+      } else {
+        logger.warn({ hostAwsDir }, 'Host ~/.aws not found; containerized Kiro device-flow tokens may be unavailable');
+      }
+
+      const hostKiroCliDataDir = path.join(
+        processEnv.NANOCLAW_REAL_HOME,
+        'Library',
+        'Application Support',
+        'kiro-cli',
+      );
+      if (fs.existsSync(hostKiroCliDataDir)) {
+        dockerArgs.push('-v', `${hostKiroCliDataDir}:/home/node/.local/share/kiro-cli`);
+      } else {
+        logger.warn(
+          { hostKiroCliDataDir },
+          'Host Kiro CLI data directory not found; containerized kiro-cli may not see login state',
+        );
+      }
+
+      for (const mount of validatedMounts) {
+        dockerArgs.push(
+          '-v',
+          `${mount.hostPath}:${mount.containerPath}${mount.readonly ? ':ro' : ''}`,
+        );
+      }
+
+      const dockerEnv: Record<string, string> = {
+        NANOCLAW_GROUP_DIR: '/workspace/group',
+        NANOCLAW_IPC_DIR: '/workspace/ipc',
+        NANOCLAW_GLOBAL_DIR: '/workspace/global',
+        NANOCLAW_EXTRA_DIR: '/workspace/extra',
+        NANOCLAW_REAL_HOME: '/home/node',
+        HOME: '/home/node',
+        PATH: '/home/node/.local/bin:/usr/local/bin:/usr/bin:/bin',
+        NANOCLAW_IN_DOCKER: '1',
+      };
+      if (process.env.KIRO_AGENT_NAME) {
+        dockerEnv.KIRO_AGENT_NAME = process.env.KIRO_AGENT_NAME;
+      }
+      if (process.env.KIRO_MODEL) {
+        dockerEnv.KIRO_MODEL = process.env.KIRO_MODEL;
+      }
+
+      for (const [key, value] of Object.entries(dockerEnv)) {
+        dockerArgs.push('-e', `${key}=${value}`);
+      }
+
+      dockerArgs.push(AGENT_IMAGE);
+      container = spawn('docker', dockerArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          PATH: process.env.PATH || '',
+        },
+      });
+    } else {
+      container = spawn('node', [agentRunnerEntry], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: groupDir,
+        env: processEnv,
+      });
+    }
 
     onProcess(container, processName);
 
@@ -279,8 +380,8 @@ export async function runContainerAgent(
 
     // Pass secrets via stdin (never written to disk)
     input.secrets = readSecrets();
-    container.stdin.write(JSON.stringify(input));
-    container.stdin.end();
+    container.stdin!.write(JSON.stringify(input));
+    container.stdin!.end();
     // Remove secrets from input so they don't appear in logs
     delete input.secrets;
 
@@ -289,7 +390,7 @@ export async function runContainerAgent(
     let newSessionId: string | undefined;
     let outputChain = Promise.resolve();
 
-    container.stdout.on('data', (data) => {
+    container.stdout!.on('data', (data) => {
       const chunk = data.toString();
 
       // Always accumulate for logging
@@ -339,7 +440,7 @@ export async function runContainerAgent(
       }
     });
 
-    container.stderr.on('data', (data) => {
+    container.stderr!.on('data', (data) => {
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {

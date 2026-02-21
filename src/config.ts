@@ -47,6 +47,10 @@ export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,
   parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5,
 );
+export const AGENT_RUNTIME =
+  (process.env.NANOCLAW_AGENT_RUNTIME || 'docker').toLowerCase();
+export const AGENT_IMAGE =
+  process.env.NANOCLAW_AGENT_IMAGE || 'nanoclaw-agent:latest';
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

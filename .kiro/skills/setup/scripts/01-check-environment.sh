@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# 01-check-environment.sh — Detect OS, Node, Kiro CLI, and existing NanoClaw config
+# 01-check-environment.sh — Detect OS, Node, Docker Desktop, and existing NanoClaw config
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -36,18 +36,21 @@ else
   log "Node not found"
 fi
 
-# Check Kiro CLI
-KIRO_CLI="missing"
-KIRO_CLI_PATH="not_found"
-if command -v kiro-cli >/dev/null 2>&1; then
-  KIRO_CLI="available"
-  KIRO_CLI_PATH=$(command -v kiro-cli)
-  log "Kiro CLI: available ($KIRO_CLI_PATH)"
+# Check Docker
+DOCKER="not_found"
+if command -v docker >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then
+    DOCKER="running"
+    log "Docker: running"
+  else
+    DOCKER="installed_not_running"
+    log "Docker: installed but not running"
+  fi
 else
-  log "Kiro CLI: missing"
+  log "Docker: not found"
 fi
 
-# Check Kiro agent config
+# Check Kiro agent config (mounted into container at runtime)
 KIRO_AGENT_CONFIG="missing"
 if [ -f "$HOME/.kiro/agents/agent_config.json" ]; then
   KIRO_AGENT_CONFIG="found"
@@ -88,8 +91,7 @@ cat <<EOF_STATUS
 PLATFORM: $PLATFORM
 NODE_VERSION: $NODE_VERSION
 NODE_OK: $NODE_OK
-KIRO_CLI: $KIRO_CLI
-KIRO_CLI_PATH: $KIRO_CLI_PATH
+DOCKER: $DOCKER
 KIRO_AGENT_CONFIG: $KIRO_AGENT_CONFIG
 HAS_ENV: $HAS_ENV
 HAS_AUTH: $HAS_AUTH
@@ -100,6 +102,6 @@ LOG: logs/setup.log
 EOF_STATUS
 
 # Exit non-zero when hard prerequisites are missing
-if [ "$NODE_OK" = "false" ] || [ "$KIRO_CLI" = "missing" ]; then
+if [ "$NODE_OK" = "false" ] || [ "$DOCKER" != "running" ] || [ "$KIRO_AGENT_CONFIG" != "found" ]; then
   exit 2
 fi
