@@ -48,7 +48,9 @@ Only escalate to user help after repeated failures.
 
 ## 3. Runtime Readiness (No Container)
 
-Run `./.kiro/skills/setup/scripts/03-setup-container.sh` and parse the status block.
+Run `./.kiro/skills/setup/scripts/03-setup-runtime.sh` and parse the status block.
+
+Do not run `./container/build.sh` in setup. This project uses host-mode Kiro CLI, not container-image builds.
 
 This script now verifies host-mode runtime prerequisites:
 
@@ -185,7 +187,7 @@ Log tail command:
 
 - Check trigger pattern and registered JID:
   `sqlite3 store/messages.db "SELECT * FROM registered_groups"`
-- Check `logs/nanoclaw.log` and `groups/main/logs/container-*.log`
+- Check `logs/nanoclaw.log` and `groups/main/logs/agent-*.log`
 - Verify `kiro-cli` works manually: `kiro-cli --version`
 
 **WhatsApp disconnected:**

@@ -4,7 +4,7 @@ Personal Kiro assistant. See [README.md](README.md) for philosophy and setup. Se
 
 ## Quick Context
 
-Single Node.js process that connects to WhatsApp, routes messages to Kiro CLI running in Apple Container (Linux VMs). Each group has isolated filesystem and memory.
+Single Node.js process that connects to WhatsApp, routes messages to Kiro CLI on the host (no container image build). Each group has isolated filesystem and memory.
 
 ## Key Files
 
@@ -15,7 +15,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Kiro CLI ru
 | `src/ipc.ts` | IPC watcher and task processing |
 | `src/router.ts` | Message formatting and outbound routing |
 | `src/config.ts` | Trigger pattern, paths, intervals |
-| `src/container-runner.ts` | Spawns agent containers with mounts |
+| `src/container-runner.ts` | Spawns per-group agent runner processes and sets runtime env |
 | `src/task-scheduler.ts` | Runs scheduled tasks |
 | `src/db.ts` | SQLite operations |
 | `groups/{name}/.kiro/steering/Agents.md` | Per-group memory (isolated) |
@@ -27,7 +27,7 @@ Single Node.js process that connects to WhatsApp, routes messages to Kiro CLI ru
 |-------|-------------|
 | `/setup` | First-time installation, authentication, service configuration |
 | `/customize` | Adding channels, integrations, changing behavior |
-| `/debug` | Container issues, logs, troubleshooting |
+| `/debug` | Runtime issues, logs, troubleshooting |
 
 ## Development
 
@@ -36,7 +36,7 @@ Run commands directly—don't tell the user to run them.
 ```bash
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
-./container/build.sh # Rebuild agent container
+./.kiro/skills/setup/scripts/03-setup-runtime.sh # Validate host runtime setup
 ```
 
 Service management:
@@ -45,13 +45,13 @@ launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
 launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
 ```
 
-## Container Build Cache
+## Runtime Notes
 
-Apple Container's buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild:
+This deployment uses host-mode Kiro CLI. Do not run container build or builder-cache commands for setup.
 
 ```bash
-container builder stop && container builder rm && container builder start
-./container/build.sh
+npm run build
+./.kiro/skills/setup/scripts/03-setup-runtime.sh
 ```
 
-Always verify after rebuild: `container run -i --rm --entrypoint wc nanoclaw-agent:latest -l /app/src/index.ts`
+If setup still fails, check: `logs/setup.log` and `logs/nanoclaw.error.log`
