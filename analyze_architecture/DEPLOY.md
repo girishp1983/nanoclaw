@@ -1,100 +1,74 @@
-# Deployment Notes
+# Deployment Notes (Kiro Runtime)
 
 ## Purpose
-This file explains how source code is compiled, what appears in `dist/`, and how NanoClaw is built and deployed.
+
+How to build, deploy, restart, and verify NanoClaw when runtime backend is Kiro CLI.
 
 ## `src/` vs `dist/`
 
-- `src/` contains handwritten TypeScript source files.
-- `dist/` contains generated build artifacts produced by `tsc`.
-- Runtime entrypoint is `dist/index.js` (`package.json` -> `main`).
+- `src/`: TypeScript source files
+- `dist/`: compiled JavaScript used by production service
 
-Why `dist/` has many more files than `src/`:
-- TypeScript is configured to emit multiple artifact types per source file.
-- In this repo, `tsconfig.json` enables:
-  - `declaration: true`
-  - `declarationMap: true`
-  - `sourceMap: true`
-- So each `.ts` can emit up to 4 files.
+Important:
+- launchd runs `dist/index.js`
+- `container/agent-runner` also compiles to `container/agent-runner/dist/index.js`
 
-## Meaning of the 4 file types
-
-- `.js`
-  - Compiled JavaScript executed by Node.js.
-- `.js.map`
-  - Source map from compiled `.js` back to original `.ts` for debugging.
-- `.d.ts`
-  - Type declaration file for TypeScript type checking/intellisense.
-- `.d.ts.map`
-  - Declaration map linking `.d.ts` back to original `.ts` for editor navigation.
-
-## Build Commands
-
-From project root:
+## Build
 
 ```bash
 npm run build
 ```
 
-What it does (`package.json`):
-1. Runs host TypeScript build: `tsc` (`src/` -> `dist/`).
-2. Builds agent runner in `container/agent-runner` (`npm install` + `npm run build`).
+This compiles:
+- host app (`src` -> `dist`)
+- agent-runner (`container/agent-runner/src` -> `container/agent-runner/dist`)
 
-Useful alternatives:
+## Restart Service
 
 ```bash
-npm run build:agent   # Build only container/agent-runner
-npm run dev           # Build agent runner, then run host from src with tsx
-npm run start         # Run compiled host: node dist/index.js
-npm run typecheck     # Type check only (no output files)
+launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 ```
 
-## Deploy (macOS launchd)
-
-NanoClaw is intended to run as a launch agent (`com.nanoclaw`).
-
-Typical commands:
+## Verify After Restart
 
 ```bash
-# Install/load
-cp launchd/com.nanoclaw.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl list | rg com.nanoclaw
 
-# Stop/unload
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-
-# Restart
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist && \
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-
-# Status
-launchctl list | grep nanoclaw
-```
-
-Logs:
-
-- `logs/nanoclaw.log`
-- `logs/nanoclaw.error.log`
-
-## Recommended update flow
-
-1. Pull/code changes.
-2. Rebuild:
-
-```bash
-npm run build
-```
-
-3. Restart launchd service:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist && \
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-```
-
-4. Verify:
-
-```bash
-launchctl list | grep nanoclaw
+# runtime logs
 tail -n 100 logs/nanoclaw.log
+tail -n 100 logs/nanoclaw.error.log
+```
+
+Expected signals:
+- DB initialized
+- WhatsApp connected
+- Scheduler started
+- IPC watcher started
+
+## Smoke Test
+
+1. Send a WhatsApp message to a registered group.
+2. Watch logs for:
+- message persisted
+- queue processing
+- agent process spawn
+- outbound message
+
+Optional task smoke test:
+- create a one-time task due within 1-2 minutes
+- confirm `scheduled_tasks` row and `task_run_logs` entry
+
+## Release Hygiene
+
+Before pushing:
+```bash
+npm run typecheck
+npm run test
+```
+
+Then:
+```bash
+git add -A
+git commit -m "..."
+git push origin <branch>
 ```

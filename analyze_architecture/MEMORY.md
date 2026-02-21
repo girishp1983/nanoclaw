@@ -1,143 +1,73 @@
-# Memory Model
+# Memory Model (Kiro Runtime)
 
 ## Overview
-NanoClaw memory is layered. Different data types are persisted in different places for different purposes.
 
-## Memory layers
+NanoClaw memory is layered. Kiro does not receive memory from one single source; it gets context from SQL prompts, group files, Kiro's own conversation history, and runtime config.
 
-### 1) Operational memory in SQLite
+## How Memory Is Provided to Kiro CLI
 
-Database file: `store/messages.db`
+1. **Prompt memory (immediate context)**
+- Host reads pending chat history from SQLite (`getMessagesSince`).
+- Messages are formatted and passed as the prompt payload.
 
-Main tables involved:
-- `messages`: stored inbound chat messages
-- `chats`: chat metadata (name, last activity)
-- `sessions`: `group_folder -> session_id` mapping
-- `router_state`: cursors (`last_timestamp`, `last_agent_timestamp`)
-- `registered_groups`: group registration and settings
-- `scheduled_tasks` and `task_run_logs`: task state and history
+2. **Conversation continuation (`--resume`)**
+- Host stores a per-group session marker in `sessions` table.
+- Runner passes `--resume` when marker exists.
+- Kiro continues conversation in the same group working directory context.
 
-This is the host's operational state and survives restart.
+3. **Filesystem memory in group workspace**
+- Kiro runs with cwd: `groups/<group>/`.
+- Files in that folder (including `CLAUDE.md` if present) are available to the agent/tools.
 
-### 2) Session continuity pointer (DB)
+4. **Custom agent memory/prompt**
+- Kiro agent definition in `~/.kiro/agents/agent_config.json` contains base prompt, tools, MCP settings, and model defaults.
+- NanoClaw ensures `@nanoclaw` MCP access is wired at runtime.
 
-- `sessions` table stores the latest Claude session ID per group.
-- On agent output with `newSessionId`, host updates in-memory map and persists via `setSession(...)`.
-- On startup, host reloads all sessions via `getAllSessions()`.
+5. **Task history memory**
+- `scheduled_tasks` + `task_run_logs` in SQL preserve automation history and outcomes.
 
-This is a pointer/index layer, not the full conversation artifact.
+## Persistence Layers
 
-### 3) Claude session artifacts on disk
+### A) Operational SQLite state
+- `store/messages.db`
+- tables: `messages`, `chats`, `sessions`, `router_state`, `registered_groups`, `scheduled_tasks`, `task_run_logs`
 
-Per group path:
-- `data/sessions/<group>/.claude/`
+### B) Group files
+- `groups/<group>/`
+- `groups/<group>/CLAUDE.md` (if used)
+- `groups/global/` for shared project files
 
-This directory is used as the agent HOME (effectively `~/.claude/` for that group runtime).
-It contains Claude session/transcript artifacts and settings used by the SDK.
+### C) Kiro local state
+- `~/.kiro/agents/agent_config.json` (agent config)
+- Kiro’s own support/conversation store (managed by Kiro CLI)
 
-At spawn time, host ensures `settings.json` exists with:
-- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
-- `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`
-- `CLAUDE_CODE_DISABLE_AUTO_MEMORY=0` (auto memory enabled)
+### D) IPC queues
+- `data/ipc/<group>/...`
+- transient command/message transport between runner and host
 
-### 4) Group memory files (`CLAUDE.md`)
+## Isolation Model
 
-Primary per-group memory file:
-- `groups/<group>/CLAUDE.md`
+Isolation key is **group folder**:
+- group has its own working directory
+- group has its own message cursor in `router_state`
+- group has its own session marker in `sessions`
+- queue serializes execution per group
 
-Optional shared/global memory file:
-- `groups/global/CLAUDE.md`
-
-Agent runs in group cwd and can use these as persistent instruction/memory documents.
-
-### 5) Archived conversation memory
-
-Before compaction, a pre-compact hook can archive transcripts as markdown under:
-- `groups/<group>/conversations/`
-
-This provides searchable long-term conversation history outside the live session stream.
-
-Important distinction:
-- Raw Claude session transcript artifacts are under:
-  - `data/sessions/<group>/.claude/projects/.../*.jsonl`
-- Archived markdown copies are under:
-  - `groups/<group>/conversations/*.md`
-
-For main group specifically:
-- Raw session artifacts example:
-  - `data/sessions/main/.claude/projects/-Users-girpatil-Documents-Coding-ClaudeCode-cowork-nanoclaw-groups-main/*.jsonl`
-- Archive target folder:
-  - `groups/main/conversations/`
-
-`groups/main/conversations/` is created only when the pre-compact hook actually writes an archive, so it may not exist even when session `.jsonl` files already exist.
-
-## How memory gets updated
-
-### Message and metadata persistence
-
-- Incoming WhatsApp events are stored via host callbacks:
-  - `storeMessage(...)` for content
-  - `storeChatMetadata(...)` for chat activity
-
-### Session memory updates
-
-- During agent runs, streamed outputs may include `newSessionId`.
-- Host persists this with `setSession(...)`.
-- Future runs can resume with that session ID.
-
-### Task-related memory updates
-
-- Task creation/update/delete goes through IPC -> DB (`scheduled_tasks`).
-- Task execution outcomes are appended to `task_run_logs` and summarized in `scheduled_tasks.last_result`.
-
-### File memory updates (`CLAUDE.md`)
-
-- Updated only when explicitly written by user/agent/tooling.
-- Not auto-generated by scheduler loops.
-
-## Isolation model
-
-Memory is isolated by group:
-- session directory: `data/sessions/<group>/...`
-- IPC namespace: `data/ipc/<group>/...`
-- working directory and CLAUDE.md: `groups/<group>/...`
-
-Main group has broader administrative permissions, but regular group memory does not automatically leak across groups.
-
-## `group` vs `isolated` task context
-
-For scheduled tasks:
-- `context_mode='group'`: resumes group session when available.
-- `context_mode='isolated'`: starts without group session continuity.
-
-So two tasks with the same prompt can behave differently depending on context mode.
-
-## What survives restart
+## What Survives Restart
 
 Survives:
-- SQLite data (`store/messages.db`)
-- per-group session files (`data/sessions/...`)
-- group files (`groups/...`, including `CLAUDE.md`)
+- `store/messages.db`
+- `groups/...` files
+- Kiro agent config in `~/.kiro/...`
 
-Transient/in-memory only:
-- process-local maps in `src/index.ts` (reloaded from DB on startup)
+Does not survive process restart (recomputed/reloaded):
+- in-memory maps in `src/index.ts`
+- active process handles in group queue
 
-## Practical checks
-
-Show session pointers:
+## Practical Checks
 
 ```sql
 SELECT group_folder, session_id FROM sessions;
-```
-
-Show last message activity:
-
-```sql
-SELECT chat_jid, MAX(timestamp) FROM messages GROUP BY chat_jid;
-```
-
-Show registered groups:
-
-```sql
-SELECT jid, name, folder, trigger_pattern FROM registered_groups;
+SELECT id, group_folder, schedule_type, status, next_run FROM scheduled_tasks ORDER BY created_at DESC;
+SELECT task_id, run_at, status FROM task_run_logs ORDER BY run_at DESC LIMIT 20;
 ```

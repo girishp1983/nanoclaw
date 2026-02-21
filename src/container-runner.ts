@@ -40,6 +40,39 @@ export interface ContainerOutput {
   error?: string;
 }
 
+function ensureGroupAgentsFile(groupDir: string): void {
+  const agentsPath = path.join(groupDir, 'AGENTS.md');
+  if (fs.existsSync(agentsPath)) return;
+
+  const claudePath = path.join(groupDir, 'CLAUDE.md');
+  if (fs.existsSync(claudePath)) {
+    const claudeContent = fs.readFileSync(claudePath, 'utf-8');
+    fs.writeFileSync(
+      agentsPath,
+      [
+        '# AGENTS',
+        '',
+        'This file is generated from CLAUDE.md for Kiro CLI steering compatibility.',
+        '',
+        claudeContent,
+      ].join('\n'),
+    );
+    return;
+  }
+
+  fs.writeFileSync(
+    agentsPath,
+    [
+      '# AGENTS',
+      '',
+      'Add steering instructions for this group here.',
+      '',
+      '- Scope: this group workspace only',
+      '- Runtime: Kiro CLI custom agent',
+    ].join('\n'),
+  );
+}
+
 /**
  * Build environment variables and prepare directories for the agent process.
  * Replaces the old buildVolumeMounts() — instead of container mounts,
@@ -51,6 +84,8 @@ function buildProcessEnv(
 ): Record<string, string> {
   const projectRoot = process.cwd();
   const groupDir = path.join(GROUPS_DIR, group.folder);
+  fs.mkdirSync(groupDir, { recursive: true });
+  ensureGroupAgentsFile(groupDir);
 
   // Per-group IPC namespace
   const groupIpcDir = path.join(DATA_DIR, 'ipc', group.folder);

@@ -39,6 +39,7 @@ interface KiroAgentConfig {
   mcpServers?: Record<string, unknown>;
   tools?: unknown;
   allowedTools?: unknown;
+  resources?: unknown;
 }
 
 interface KiroMcpServerConfig {
@@ -61,6 +62,7 @@ const MAX_CAPTURE_CHARS = 10 * 1024 * 1024;
 
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const KIRO_STEERING_GLOB = 'file://.kiro/steering/**/*.md';
 
 let activeChild: ChildProcess | null = null;
 
@@ -245,6 +247,7 @@ function ensureNanoclawMcpForKiro(
     parsed.mcpServers = mcpServers;
     parsed.tools = ensureArrayStringIncludes(parsed.tools, '@nanoclaw');
     parsed.allowedTools = ensureArrayStringIncludes(parsed.allowedTools, '@nanoclaw');
+    parsed.resources = ensureArrayStringIncludes(parsed.resources, KIRO_STEERING_GLOB);
 
     fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2) + '\n');
   } catch (err) {
