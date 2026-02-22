@@ -160,7 +160,8 @@ What this script does on macOS:
 - Runs `npm run build`
 - Generates `~/Library/LaunchAgents/com.nanoclaw.plist`
 - Sets launchd `ProgramArguments` to `node <project>/dist/index.js`
-- Sets `WorkingDirectory`, `PATH`, `HOME`, stdout/stderr log paths
+- Sets `WorkingDirectory`, `HOME`, stdout/stderr log paths
+- Auto-computes service `PATH` (detected `kiro-cli` dir, detected `node` dir, `~/.local/bin`, `~/bin`, `~/.bun/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/bin`)
 - Calls `launchctl load` and verifies service appears in `launchctl list`
 
 ```bash
@@ -187,6 +188,9 @@ See `analyze_architecture/`:
 - `SCHEDULED_TASKS.md`
 - `Launch_Kiro_nanoClaw.md`
 - `Linting.md`
+
+Troubleshooting:
+- `docs/TROUBLESHOOTING.md`
 
 ## License
 

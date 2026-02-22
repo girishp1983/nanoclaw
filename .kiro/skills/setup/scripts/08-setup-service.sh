@@ -31,11 +31,66 @@ if [ -z "$PLATFORM" ]; then
   esac
 fi
 
-NODE_PATH=$(which node)
+NODE_PATH="$(command -v node || true)"
 PROJECT_PATH="$PROJECT_ROOT"
 HOME_PATH="$HOME"
+KIRO_CLI_PATH="$(command -v kiro-cli || true)"
+KIRO_CLI_DIR=""
+if [ -n "$KIRO_CLI_PATH" ]; then
+  KIRO_CLI_DIR="$(dirname "$KIRO_CLI_PATH")"
+fi
 
-log "Setting up service: platform=$PLATFORM node=$NODE_PATH project=$PROJECT_PATH"
+SERVICE_PATH=""
+append_path() {
+  local dir="$1"
+  if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+    return
+  fi
+  case ":$SERVICE_PATH:" in
+    *":$dir:"*) ;;
+    *)
+      if [ -z "$SERVICE_PATH" ]; then
+        SERVICE_PATH="$dir"
+      else
+        SERVICE_PATH="$SERVICE_PATH:$dir"
+      fi
+      ;;
+  esac
+}
+
+# Build service PATH in priority order.
+# Include detected kiro-cli/node locations and common user/system bin directories.
+append_path "$KIRO_CLI_DIR"
+if [ -n "$NODE_PATH" ]; then
+  append_path "$(dirname "$NODE_PATH")"
+fi
+append_path "$HOME_PATH/.local/bin"
+append_path "$HOME_PATH/bin"
+append_path "$HOME_PATH/.bun/bin"
+append_path "/opt/homebrew/bin"
+append_path "/usr/local/bin"
+append_path "/usr/bin"
+append_path "/bin"
+
+log "Setting up service: platform=$PLATFORM node=$NODE_PATH kiro=$KIRO_CLI_PATH project=$PROJECT_PATH"
+log "Computed service PATH: $SERVICE_PATH"
+
+if [ -z "$NODE_PATH" ]; then
+  log "Node binary not found in current shell"
+  cat <<EOF
+=== NANOCLAW SETUP: SETUP_SERVICE ===
+SERVICE_TYPE: unknown
+NODE_PATH: not_found
+KIRO_CLI_PATH: ${KIRO_CLI_PATH:-not_found}
+SERVICE_PATH: $SERVICE_PATH
+PROJECT_PATH: $PROJECT_PATH
+STATUS: failed
+ERROR: node_not_found
+LOG: logs/setup.log
+=== END ===
+EOF
+  exit 1
+fi
 
 # Build first
 log "Building TypeScript"
@@ -45,6 +100,8 @@ if ! npm run build >> "$LOG_FILE" 2>&1; then
 === NANOCLAW SETUP: SETUP_SERVICE ===
 SERVICE_TYPE: unknown
 NODE_PATH: $NODE_PATH
+KIRO_CLI_PATH: ${KIRO_CLI_PATH:-not_found}
+SERVICE_PATH: $SERVICE_PATH
 PROJECT_PATH: $PROJECT_PATH
 STATUS: failed
 ERROR: build_failed
@@ -86,7 +143,7 @@ case "$PLATFORM" in
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${HOME_PATH}/.local/bin</string>
+        <string>${SERVICE_PATH}</string>
         <key>HOME</key>
         <string>${HOME_PATH}</string>
     </dict>
@@ -118,6 +175,8 @@ PLISTEOF
 === NANOCLAW SETUP: SETUP_SERVICE ===
 SERVICE_TYPE: launchd
 NODE_PATH: $NODE_PATH
+KIRO_CLI_PATH: ${KIRO_CLI_PATH:-not_found}
+SERVICE_PATH: $SERVICE_PATH
 PROJECT_PATH: $PROJECT_PATH
 PLIST_PATH: $PLIST_PATH
 SERVICE_LOADED: $SERVICE_LOADED
@@ -145,7 +204,7 @@ WorkingDirectory=${PROJECT_PATH}
 Restart=always
 RestartSec=5
 Environment=HOME=${HOME_PATH}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:${HOME_PATH}/.local/bin
+Environment=PATH=${SERVICE_PATH}
 StandardOutput=append:${PROJECT_PATH}/logs/nanoclaw.log
 StandardError=append:${PROJECT_PATH}/logs/nanoclaw.error.log
 
@@ -171,6 +230,8 @@ UNITEOF
 === NANOCLAW SETUP: SETUP_SERVICE ===
 SERVICE_TYPE: systemd
 NODE_PATH: $NODE_PATH
+KIRO_CLI_PATH: ${KIRO_CLI_PATH:-not_found}
+SERVICE_PATH: $SERVICE_PATH
 PROJECT_PATH: $PROJECT_PATH
 UNIT_PATH: $UNIT_PATH
 SERVICE_LOADED: $SERVICE_LOADED
@@ -186,6 +247,8 @@ EOF
 === NANOCLAW SETUP: SETUP_SERVICE ===
 SERVICE_TYPE: unknown
 NODE_PATH: $NODE_PATH
+KIRO_CLI_PATH: ${KIRO_CLI_PATH:-not_found}
+SERVICE_PATH: $SERVICE_PATH
 PROJECT_PATH: $PROJECT_PATH
 STATUS: failed
 ERROR: unsupported_platform

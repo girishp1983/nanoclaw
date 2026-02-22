@@ -146,12 +146,15 @@ If already running, unload/restart cleanly first.
 
 Run `./.kiro/skills/setup/scripts/08-setup-service.sh` and parse status block.
 
+The setup-service script auto-detects `kiro-cli`/`node` paths and writes a service `PATH` that includes common install locations (`~/.local/bin`, `~/bin`, `~/.bun/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/bin`).
+
 If service load fails:
 
 - Read `logs/setup.log`
 - Check `logs/nanoclaw.error.log`
 - On macOS check `launchctl list | grep nanoclaw`
 - On Linux check `systemctl --user status nanoclaw`
+- See `docs/TROUBLESHOOTING.md` for manual PATH fixes
 
 Fix and re-run step 9.
 
