@@ -31,8 +31,8 @@ The setup skill automates full bootstrap (not just WhatsApp auth):
 4. Handles WhatsApp authentication (QR browser, pairing code, or terminal QR), with retry flow.
 5. Reads authenticated bot number from `store/auth/creds.json`.
 6. Asks for trigger word and channel type (group vs DM/self-chat).
-7. For group channels, syncs chats from WhatsApp and lists candidate groups by name.
-8. Maps selected group name to JID (or uses DM JID), then registers the channel in `registered_groups` (`jid`, `folder`, trigger settings).
+7. For group channels, syncs chats from WhatsApp and lists candidate groups with JIDs.
+8. Maps selected group (confirmed by JID) to registration data (or uses DM JID), then registers the channel in `registered_groups` (`jid`, `folder`, trigger settings).
 9. Supports later reconfiguration to move `main` to a different WhatsApp group.
 10. Configures mount allowlist at `~/.config/nanoclaw/mount-allowlist.json`.
 11. Builds and installs background service config (`launchd` on macOS, `systemd` on Linux), then loads/starts it.

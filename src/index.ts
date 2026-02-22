@@ -50,6 +50,23 @@ let messageLoopRunning = false;
 let whatsapp: WhatsAppChannel;
 const queue = new GroupQueue();
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getGroupTriggerPattern(group: RegisteredGroup): RegExp {
+  const rawTrigger = typeof group.trigger === 'string' ? group.trigger.trim() : '';
+  if (!rawTrigger) return TRIGGER_PATTERN;
+
+  const normalized = rawTrigger.startsWith('@') ? rawTrigger : `@${rawTrigger}`;
+  return new RegExp(`^${escapeRegex(normalized)}\\b`, 'i');
+}
+
+function hasGroupTrigger(messages: NewMessage[], group: RegisteredGroup): boolean {
+  const pattern = getGroupTriggerPattern(group);
+  return messages.some((m) => pattern.test(m.content.trim()));
+}
+
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
   const agentTs = getRouterState('last_agent_timestamp');
@@ -129,9 +146,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {
-    const hasTrigger = missedMessages.some((m) =>
-      TRIGGER_PATTERN.test(m.content.trim()),
-    );
+    const hasTrigger = hasGroupTrigger(missedMessages, group);
     if (!hasTrigger) return true;
   }
 
@@ -326,9 +341,7 @@ async function startMessageLoop(): Promise<void> {
           // Non-trigger messages accumulate in DB and get pulled as
           // context when a trigger eventually arrives.
           if (needsTrigger) {
-            const hasTrigger = groupMessages.some((m) =>
-              TRIGGER_PATTERN.test(m.content.trim()),
-            );
+            const hasTrigger = hasGroupTrigger(groupMessages, group);
             if (!hasTrigger) continue;
           }
 

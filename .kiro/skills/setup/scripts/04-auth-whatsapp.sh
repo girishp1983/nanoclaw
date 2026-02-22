@@ -149,15 +149,30 @@ case "$METHOD" in
       exit 3
     fi
 
+    TEMPLATE_PATH="$PROJECT_ROOT/.kiro/skills/setup/scripts/qr-auth.html"
+    if [ ! -f "$TEMPLATE_PATH" ]; then
+      LEGACY_TEMPLATE_PATH="$PROJECT_ROOT/.claude/skills/setup/scripts/qr-auth.html"
+      if [ -f "$LEGACY_TEMPLATE_PATH" ]; then
+        TEMPLATE_PATH="$LEGACY_TEMPLATE_PATH"
+        log "Using legacy QR template path: $LEGACY_TEMPLATE_PATH"
+      fi
+    fi
+
+    if [ ! -f "$TEMPLATE_PATH" ]; then
+      log "ERROR: QR template not found at expected paths"
+      emit_status "failed" "failed" "missing_qr_template"
+      exit 1
+    fi
+
     # Generate QR SVG and inject into HTML template
     log "Generating QR SVG"
-    node -e "
+    NANOCLAW_QR_TEMPLATE_PATH="$TEMPLATE_PATH" node -e "
       const QR = require('qrcode');
       const fs = require('fs');
       const qrData = fs.readFileSync('store/qr-data.txt', 'utf8');
       QR.toString(qrData, { type: 'svg' }, (err, svg) => {
         if (err) process.exit(1);
-        const template = fs.readFileSync('.claude/skills/setup/scripts/qr-auth.html', 'utf8');
+        const template = fs.readFileSync(process.env.NANOCLAW_QR_TEMPLATE_PATH, 'utf8');
         fs.writeFileSync('store/qr-auth.html', template.replace('{{QR_SVG}}', svg));
       });
     " >> "$LOG_FILE" 2>&1

@@ -11,6 +11,10 @@ mkdir -p "$PROJECT_ROOT/logs"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [register-channel] $*" >> "$LOG_FILE"; }
 
+sql_escape() {
+  printf "%s" "$1" | sed "s/'/''/g"
+}
+
 cd "$PROJECT_ROOT"
 
 # Parse args
@@ -50,13 +54,35 @@ log "Registering channel: jid=$JID name=$NAME trigger=$TRIGGER folder=$FOLDER re
 
 # Create data directory
 mkdir -p "$PROJECT_ROOT/data"
+mkdir -p "$PROJECT_ROOT/store"
 
-# Write directly to SQLite (schema should exist from previous build/start)
+# Write directly to SQLite
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
 DB_PATH="$PROJECT_ROOT/store/messages.db"
 REQUIRES_TRIGGER_INT=$( [ "$REQUIRES_TRIGGER" = "true" ] && echo 1 || echo 0 )
 
-sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger) VALUES ('$JID', '$NAME', '$FOLDER', '$TRIGGER', '$TIMESTAMP', NULL, $REQUIRES_TRIGGER_INT);"
+JID_SQL=$(sql_escape "$JID")
+NAME_SQL=$(sql_escape "$NAME")
+FOLDER_SQL=$(sql_escape "$FOLDER")
+TRIGGER_SQL=$(sql_escape "$TRIGGER")
+TIMESTAMP_SQL=$(sql_escape "$TIMESTAMP")
+
+sqlite3 "$DB_PATH" "
+CREATE TABLE IF NOT EXISTS registered_groups (
+  jid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder TEXT NOT NULL UNIQUE,
+  trigger_pattern TEXT NOT NULL,
+  added_at TEXT NOT NULL,
+  container_config TEXT,
+  requires_trigger INTEGER DEFAULT 1
+);
+INSERT OR REPLACE INTO registered_groups (
+  jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger
+) VALUES (
+  '$JID_SQL', '$NAME_SQL', '$FOLDER_SQL', '$TRIGGER_SQL', '$TIMESTAMP_SQL', NULL, $REQUIRES_TRIGGER_INT
+);
+"
 
 log "Wrote registration to SQLite"
 

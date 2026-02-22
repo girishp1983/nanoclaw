@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { TRIGGER_PATTERN } from './config.js';
+import { ASSISTANT_NAME, TRIGGER_PATTERN } from './config.js';
 import {
   escapeXml,
   formatMessages,
@@ -20,6 +20,8 @@ function makeMsg(overrides: Partial<NewMessage> = {}): NewMessage {
     ...overrides,
   };
 }
+
+const triggerMention = `@${ASSISTANT_NAME}`;
 
 // --- escapeXml ---
 
@@ -102,34 +104,37 @@ describe('formatMessages', () => {
 // --- TRIGGER_PATTERN ---
 
 describe('TRIGGER_PATTERN', () => {
-  it('matches @Andy at start of message', () => {
-    expect(TRIGGER_PATTERN.test('@Andy hello')).toBe(true);
+  it('matches trigger mention at start of message', () => {
+    expect(TRIGGER_PATTERN.test(`${triggerMention} hello`)).toBe(true);
   });
 
   it('matches case-insensitively', () => {
-    expect(TRIGGER_PATTERN.test('@andy hello')).toBe(true);
-    expect(TRIGGER_PATTERN.test('@ANDY hello')).toBe(true);
+    expect(TRIGGER_PATTERN.test(`${triggerMention.toLowerCase()} hello`)).toBe(true);
+    expect(TRIGGER_PATTERN.test(`${triggerMention.toUpperCase()} hello`)).toBe(true);
   });
 
   it('does not match when not at start of message', () => {
-    expect(TRIGGER_PATTERN.test('hello @Andy')).toBe(false);
+    expect(TRIGGER_PATTERN.test(`hello ${triggerMention}`)).toBe(false);
   });
 
-  it('does not match partial name like @Andrew (word boundary)', () => {
-    expect(TRIGGER_PATTERN.test('@Andrew hello')).toBe(false);
+  it('does not match when mention is continued with another word char', () => {
+    expect(TRIGGER_PATTERN.test(`${triggerMention}x hello`)).toBe(false);
   });
 
   it('matches with word boundary before apostrophe', () => {
-    expect(TRIGGER_PATTERN.test("@Andy's thing")).toBe(true);
+    // Keep this generic: if a plain mention matches, mention+'s should too.
+    expect(TRIGGER_PATTERN.test(`${triggerMention}'s thing`)).toBe(
+      TRIGGER_PATTERN.test(triggerMention),
+    );
   });
 
-  it('matches @Andy alone (end of string is a word boundary)', () => {
-    expect(TRIGGER_PATTERN.test('@Andy')).toBe(true);
+  it('matches trigger mention alone (end of string boundary)', () => {
+    expect(TRIGGER_PATTERN.test(triggerMention)).toBe(true);
   });
 
   it('matches with leading whitespace after trim', () => {
     // The actual usage trims before testing: TRIGGER_PATTERN.test(m.content.trim())
-    expect(TRIGGER_PATTERN.test('@Andy hey'.trim())).toBe(true);
+    expect(TRIGGER_PATTERN.test(`${triggerMention} hey`.trim())).toBe(true);
   });
 });
 
@@ -219,7 +224,7 @@ describe('trigger gating (requiresTrigger interaction)', () => {
   });
 
   it('non-main group with requiresTrigger=true processes when trigger present', () => {
-    const msgs = [makeMsg({ content: '@Andy do something' })];
+    const msgs = [makeMsg({ content: `${triggerMention} do something` })];
     expect(shouldProcess(false, true, msgs)).toBe(true);
   });
 

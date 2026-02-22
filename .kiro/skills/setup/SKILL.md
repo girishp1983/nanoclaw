@@ -96,7 +96,8 @@ For group channels:
 2. If build fails, fix TypeScript errors and retry
 3. If GROUPS_IN_DB=0, inspect logs and re-run sync after fixing auth/connection
 4. Run `./.kiro/skills/setup/scripts/05b-list-groups.sh`
-5. Present likely matches by group name (not JID) and allow Other
+5. Present likely matches as `name + JID`, and require JID confirmation
+6. If duplicate group names exist, explicitly ask user to choose by JID
 
 ## 7. Register Channel
 
@@ -114,7 +115,7 @@ Use this flow when the user says they want to move Kiro-Claw to a different grou
 
 1. Refresh groups: `./.kiro/skills/setup/scripts/05-sync-groups.sh`
 2. List groups: `./.kiro/skills/setup/scripts/05b-list-groups.sh 50`
-3. Ask the user which group to switch to (by group name), then capture its JID.
+3. Ask the user which group to switch to and confirm by JID (not name only).
 4. Re-register `main` with the new JID:
 
 `./.kiro/skills/setup/scripts/06-register-channel.sh --jid "NEW_GROUP_JID@g.us" --name "main" --trigger "@TriggerWord" --folder "main"`
