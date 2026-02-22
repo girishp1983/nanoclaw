@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  AGENT_ONE_SHOT,
   ASSISTANT_NAME,
   DATA_DIR,
   IDLE_TIMEOUT,
@@ -343,7 +344,7 @@ async function startMessageLoop(): Promise<void> {
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend);
 
-          if (queue.sendMessage(chatJid, formatted)) {
+          if (!AGENT_ONE_SHOT && queue.sendMessage(chatJid, formatted)) {
             logger.debug(
               { chatJid, count: messagesToSend.length },
               'Piped messages to active container',
@@ -354,7 +355,7 @@ async function startMessageLoop(): Promise<void> {
             // Show typing indicator while the container processes the piped message
             whatsapp.setTyping(chatJid, true);
           } else {
-            // No active container — enqueue for a new one
+            // One-shot mode (or no active container): enqueue for a fresh run.
             queue.enqueueMessageCheck(chatJid);
           }
         }

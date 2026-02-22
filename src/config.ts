@@ -51,6 +51,12 @@ export const AGENT_RUNTIME =
   (process.env.NANOCLAW_AGENT_RUNTIME || 'docker').toLowerCase();
 export const AGENT_IMAGE =
   process.env.NANOCLAW_AGENT_IMAGE || 'nanoclaw-agent:latest';
+// One-shot agent mode: each container handles one run and exits.
+// Set NANOCLAW_AGENT_ONE_SHOT=false to keep long-lived per-group containers.
+const oneShotRaw = (process.env.NANOCLAW_AGENT_ONE_SHOT || 'true').toLowerCase();
+export const AGENT_ONE_SHOT = !(
+  oneShotRaw === 'false' || oneShotRaw === '0' || oneShotRaw === 'no'
+);
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

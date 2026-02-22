@@ -9,6 +9,7 @@ const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 // Mock config
 vi.mock('./config.js', () => ({
   AGENT_IMAGE: 'nanoclaw-agent:latest',
+  AGENT_ONE_SHOT: true,
   AGENT_RUNTIME: 'docker',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
   CONTAINER_TIMEOUT: 1800000, // 30min

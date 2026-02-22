@@ -9,6 +9,7 @@ import path from 'path';
 
 import {
   AGENT_IMAGE,
+  AGENT_ONE_SHOT,
   AGENT_RUNTIME,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
@@ -214,6 +215,8 @@ function buildProcessEnv(
     HOME: path.dirname(groupSessionsDir),
     // Propagate PATH so node/npx/claude are found
     PATH: process.env.PATH || '',
+    // One-shot mode: run a single Kiro turn per container then exit.
+    NANOCLAW_AGENT_ONE_SHOT: AGENT_ONE_SHOT ? '1' : '0',
   };
 
   if (isMain) {
@@ -342,6 +345,7 @@ export async function runContainerAgent(
         HOME: '/home/node',
         PATH: '/home/node/.local/bin:/usr/local/bin:/usr/bin:/bin',
         NANOCLAW_IN_DOCKER: '1',
+        NANOCLAW_AGENT_ONE_SHOT: AGENT_ONE_SHOT ? '1' : '0',
       };
       if (process.env.KIRO_AGENT_NAME) {
         dockerEnv.KIRO_AGENT_NAME = process.env.KIRO_AGENT_NAME;

@@ -67,6 +67,10 @@ const KIRO_MAIN_STEERING_RESOURCE = 'file://.kiro/steering/Agents.md';
 const KIRO_MAIN_STEERING_ABS_SUFFIX = '/groups/main/.kiro/steering/Agents.md';
 
 let activeChild: ChildProcess | null = null;
+const AGENT_ONE_SHOT = (() => {
+  const value = (process.env.NANOCLAW_AGENT_ONE_SHOT || '1').toLowerCase();
+  return !(value === '0' || value === 'false' || value === 'no');
+})();
 
 function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
@@ -459,6 +463,11 @@ async function main(): Promise<void> {
       if (result.status === 'error') {
         process.exit(1);
         return;
+      }
+
+      if (AGENT_ONE_SHOT) {
+        log('One-shot mode enabled, exiting after single run');
+        break;
       }
 
       const nextMessage = await waitForIpcMessage();

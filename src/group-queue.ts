@@ -1,8 +1,8 @@
-import { ChildProcess } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
+import { AGENT_RUNTIME, DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
 import { logger } from './logger.js';
 
 interface QueuedTask {
@@ -281,22 +281,69 @@ export class GroupQueue {
     }
   }
 
-  async shutdown(_gracePeriodMs: number): Promise<void> {
+  async shutdown(gracePeriodMs: number): Promise<void> {
     this.shuttingDown = true;
 
-    // Count active containers but don't kill them — they'll finish on their own
-    // via idle timeout or container timeout. The --rm flag cleans them up on exit.
-    // This prevents WhatsApp reconnection restarts from killing working agents.
-    const activeContainers: string[] = [];
+    const activeContainers: Array<{ name: string; process: ChildProcess }> = [];
     for (const [jid, state] of this.groups) {
       if (state.process && !state.process.killed && state.containerName) {
-        activeContainers.push(state.containerName);
+        activeContainers.push({ name: state.containerName, process: state.process });
+        logger.debug({ jid, containerName: state.containerName }, 'Active agent process found during shutdown');
       }
     }
 
+    if (activeContainers.length === 0) {
+      logger.info('GroupQueue shutting down (no active agent processes)');
+      return;
+    }
+
     logger.info(
-      { activeCount: this.activeCount, detachedContainers: activeContainers },
-      'GroupQueue shutting down (containers detached, not killed)',
+      {
+        activeCount: this.activeCount,
+        activeContainers: activeContainers.map((c) => c.name),
+        gracePeriodMs,
+      },
+      'GroupQueue shutting down (terminating active agent processes)',
     );
+
+    for (const { name, process: proc } of activeContainers) {
+      try {
+        proc.kill('SIGTERM');
+      } catch (err) {
+        logger.warn({ containerName: name, err }, 'Failed to send SIGTERM during shutdown');
+      }
+    }
+
+    // Give processes a short grace period to exit cleanly.
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, gracePeriodMs)));
+
+    for (const { name, process: proc } of activeContainers) {
+      if (proc.exitCode === null) {
+        try {
+          proc.kill('SIGKILL');
+        } catch (err) {
+          logger.warn({ containerName: name, err }, 'Failed to send SIGKILL during shutdown');
+        }
+      }
+
+      // Best-effort cleanup for docker runtime to prevent orphaned containers
+      // from consuming shared IPC input after service restarts.
+      if (AGENT_RUNTIME !== 'host') {
+        const rm = spawn('docker', ['rm', '-f', name], {
+          stdio: 'ignore',
+          env: {
+            ...process.env,
+            PATH: process.env.PATH || '',
+          },
+        });
+        rm.on('error', (err) => {
+          logger.debug(
+            { containerName: name, err },
+            'Best-effort docker rm -f failed during shutdown',
+          );
+        });
+        rm.unref();
+      }
+    }
   }
 }
