@@ -41,6 +41,46 @@ The setup skill automates full bootstrap (not just WhatsApp auth):
 
 Important detail: group name is used only for selection UX; runtime routing is done by registered JID.
 
+### Sample run of guided setup
+
+| Step | Script | What It Did |
+|------|--------|-------------|
+| 1 | 01-check-environment.sh | Verified Node.js 22.19.0, Kiro CLI, and agent config are present. No prior auth or groups found. |
+| 2 | 02-install-deps.sh | Installed npm dependencies |
+| 3 | 03-setup-runtime.sh | Ran npm run build, confirmed Kiro CLI and agent config are ready |
+| 4 | 04-auth-whatsapp.sh + npm run auth | Launched WhatsApp QR auth in terminal. You scanned the QR code and linked successfully. Credentials saved to store/auth/ |
+| 5 | 05-sync-groups.sh | Connected to WhatsApp and synced 96 groups into the local SQLite database |
+| 5b | 05b-list-groups.sh | Listed groups matching "Kiro" — found Kiro-claw (120363408325112407@g.us) and Kiro |
+| 6 | 06-register-channel.sh | Registered Kiro-claw group as the main channel with trigger @Kiro. (Had to manually create the registered_groups table first since the DB only had the chats table from sync) |
+| 7 | 07-configure-mounts.sh | Configured mount allowlist at ~/.config/nanoclaw/mount-allowlist.json with access to ~/Documents |
+| 8 | 08-setup-service.sh | Built the project, generated launchd plist at ~/Library/LaunchAgents/com.nanoclaw.plist, loaded the service |
+| 9 | 09-verify.sh | Confirmed all components are green: service running, CLI available, auth valid, 1 group registered, mounts configured |
+
+## WhatsApp Configuration
+
+| Setting | Value |
+|---------|-------|
+| Bot Phone | 65******67 (your personal number) |
+| Auth Method | QR code in terminal |
+| Credentials | store/auth/ |
+| Target Group | Kiro-claw |
+| Group JID | 120363408325112407@g.us |
+| Trigger Word | @Kiro |
+| Channel Name | main |
+| Folder | groups/main/ |
+| Requires Trigger | Yes (must prefix with @Kiro in group) |
+
+## Service Details
+
+| Setting | Value |
+|---------|-------|
+| Service Type | macOS launchd |
+| Plist | ~/Library/LaunchAgents/com.nanoclaw.plist |
+| Node Path | /usr/local/bin/node |
+| Kiro CLI Path | ~/.local/bin/kiro-cli |
+| Logs | logs/nanoclaw.log, logs/nanoclaw.error.log |
+| Mount Access | ~/Documents |
+
 ## How Kiro-CLI is launched to perform tasks?
 
 Kiro-Claw launches Kiro through `container/agent-runner`:
