@@ -280,6 +280,7 @@ async function runKiroChat(
 ): Promise<ContainerOutput> {
   ensureNanoclawMcpForKiro(input);
   const agentName = resolveAgentName();
+  const hasSession = typeof input.sessionId === 'string' && input.sessionId.trim().length > 0;
   const args: string[] = [
     'chat',
     '--no-interactive',
@@ -289,6 +290,10 @@ async function runKiroChat(
     '--agent',
     agentName,
   ];
+
+  if (hasSession) {
+    args.push('--resume');
+  }
 
   if (process.env.KIRO_MODEL && process.env.KIRO_MODEL.trim()) {
     args.push('--model', process.env.KIRO_MODEL.trim());
@@ -311,7 +316,7 @@ async function runKiroChat(
     let stdout = '';
     let stderr = '';
 
-    log(`Spawning kiro-cli (agent=${agentName}, new-session=true)`);
+    log(`Spawning kiro-cli (agent=${agentName}, new-session=${hasSession ? 'false' : 'true'})`);
 
     const child = spawn('kiro-cli', args, {
       cwd: GROUP_DIR,

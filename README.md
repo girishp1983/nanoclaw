@@ -63,7 +63,7 @@ Kiro-Claw launches Kiro through `container/agent-runner`:
 - Optional model override:
   - `KIRO_MODEL`
 
-Kiro-Claw does not pass `--resume`; each Kiro invocation starts a new session.
+Kiro-Claw passes `--resume` when a saved group session marker exists; first turn starts new, subsequent turns resume.
 
 At run time, Kiro-Claw ensures your Kiro agent config (`~/.kiro/agents/agent_config.json`) includes:
 - `nanoclaw` MCP server entry
