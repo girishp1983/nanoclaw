@@ -51,6 +51,27 @@ cd /path/to/nanoclaw
 kiro-cli
 ```
 
+## Guided Setup With Kiro `setup` Skill
+
+Start `kiro-cli` at the project root and ask:
+
+`Use the setup skill to configure Kiro-Claw for WhatsApp and register my main group.`
+
+The setup skill automates WhatsApp setup end-to-end:
+1. Checks environment prerequisites (Node, `kiro-cli`, agent config, existing auth/group config).
+2. Installs dependencies.
+3. Validates host runtime readiness (`npm run build`, `kiro-cli`, `~/.kiro/agents/agent_config.json`).
+4. Runs WhatsApp authentication (QR browser, pairing code, or terminal QR).
+5. Reads authenticated bot number from `store/auth/creds.json`.
+6. Asks for trigger word and channel type (group vs DM/self-chat).
+7. Syncs WhatsApp groups, lists groups, asks you to choose by group name.
+8. Maps selected group to JID and registers it in `registered_groups` (folder `main`, trigger, trigger-required mode).
+9. Configures mount allowlist (`~/.config/nanoclaw/mount-allowlist.json`).
+10. Creates/loads background service (`launchd` on macOS, `systemd` on Linux).
+11. Runs end-to-end verification and points you to logs.
+
+Important detail: group name is used only for selection UX; runtime routing is done by registered JID.
+
 ## How Kiro Is Used
 
 Kiro-Claw launches Kiro through `container/agent-runner`:
