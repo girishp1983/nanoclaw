@@ -22,7 +22,19 @@ Kiro-Claw runs as a small Node.js service:
 
 ## Architecture
 
+This project extends Kiro-Assistant (a desktop coworker) into a 24*7 assistant. It uses the Kiro CLI Agent to run the agentic loop. It works with all models on Bedrock that are accessible to you through Kiro CLI (access to a wider model set is being rolled out). It runs as a service on Mac (Windows version coming soon..) and supports a wide range of MCP tools. It uses a SQL database at `store/messages.db` to remember scheduled tasks. You can ask Kiro-Claw to schedule a task and it will persist that in SQL. It stores user preferences in `Agents.md` under `groups/<group_name>/.kiro/steering/`, can create additional `.md` memory files in the group working directory (`groups/<group_name>/`), and can create skills for repetitive tasks. Kiro-CLI is launched as the custom agent `Kiro-Assistant`. Its configuration is defined in `~/.kiro/agents/agent_config.json`; this file configures MCPs and indicates where skill files are located.
+
 ![Kiro-Claw Architecture](images/Kiro-Claw-Architecture.png)
+
+### Talking to Kiro-Claw
+
+You can talk to Kiro-Claw in two ways:
+- Reach out to it with direct messages (DM).
+- Reach out to it on a WhatsApp group (recommended).
+
+For either option, you can:
+- Use your own number for Kiro-Claw.
+- Give Kiro-Claw its own dedicated number.
 
 ![WhatsApp](images/Whatsapp.png)
 
@@ -239,6 +251,13 @@ See `analyze_architecture/`:
 
 Troubleshooting:
 - `docs/TROUBLESHOOTING.md`
+
+## Roadmap
+
+1. Package to run on Amazon Bedrock AgentCore.
+2. Add more social interfaces like iMessage and Facebook Messenger.
+3. Add accessibility features like Voice.
+4. Implement support for file exchange on WhatsApp (currently not implemented in view of security).
 
 ## License
 
