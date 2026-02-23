@@ -263,6 +263,12 @@ Troubleshooting:
 3. Add accessibility features like Voice.
 4. Implement support for file exchange on WhatsApp (currently not implemented in view of security).
 
+## Credits
+
+This project is inspired by [NanoClaw](https://github.com/qwibitai/nanoclaw), a clean implementation of Clawbot. We adapted the project to the Amazon Kiro and Bedrock ecosystem, and it works even better with a wide model choice (you can use your existing Kiro subscription).
+
+The project follows the same integration approach as [Kiro-Assistant](https://github.com/aws-samples/sample-kiro-assistant), which this author also worked on.
+
 ## License
 
 MIT
