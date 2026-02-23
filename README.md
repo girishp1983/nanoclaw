@@ -145,7 +145,7 @@ If target files already exist, Kiro-Claw leaves them untouched.
 - Scheduler (`once`, `cron`, `interval`)
 - MCP-based tool bridge (`send_message`, `schedule_task`, task controls)
 
-## Architecture (High Level)
+## Under the hood architecture
 
 ```mermaid
 flowchart LR
